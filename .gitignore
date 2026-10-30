@@ -1,0 +1,139 @@
+# ============================================================
+# ⭐ LifesArt ERP - .gitignore (SECURE VERSION)
+# ⭐ Natao ho an'ny GitHub Actions (Windows + Linux)
+# ============================================================
+
+# ============================================================
+# ⭐ ENVIRONMENT VARIABLES
+# ============================================================
+.env
+.env.local
+.env.*.local
+
+# ============================================================
+# ⭐ CREDENTIALS & CERTIFICATES
+# ============================================================
+admin_credentials.txt
+*.pfx
+*.cert
+
+# ⚠️ FIX: Alefa ny public.pem (ilaina amin'ny build)
+!admin-tools/keys/public.pem
+!electron/keys/public.pem
+!electron/keys/codes.db.enc
+
+# ============================================================
+# ⭐ DATABASE FILES (mety misy données)
+# ============================================================
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ============================================================
+# ⭐ LOGS
+# ============================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================================
+# ⭐ BACKUPS
+# ============================================================
+backups/
+*.backup
+*.bak
+
+# ============================================================
+# ⭐ NODE MODULES
+# ============================================================
+node_modules/
+
+# ============================================================
+# ⭐ BUILD OUTPUTS (RELEASE / DIST)
+# ============================================================
+dist/
+release/
+dist-electron/
+dist-final/
+*.AppImage
+*.exe
+*.dmg
+*.deb
+*.zip
+*.tar.gz
+
+# ============================================================
+# ⭐ ELECTRON / VITE / OS SPECIFIC
+# ============================================================
+electron-builder-debug.yml
+~/.electron
+~/.cache/electron
+~/.cache/electron-builder
+
+# ============================================================
+# ⭐ IDE & SYSTEM FILES
+# ============================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ============================================================
+# ⭐ TYPESCRIPT / BYTENODE / OBFUSCATION
+# ============================================================
+*.tsbuildinfo
+*.jsc
+*.jsc.map
+
+# ============================================================
+# ⭐ SECURITY - FIAROVANA NY LICENSE (TSY HIDITRA ANY AMIN'NY GITHUB)
+# ============================================================
+
+# Clé privée (tsy misy izay tsy tokony ho ao amin'ny repo)
+**/private.pem
+**/keys/private.pem
+admin-tools/keys/private.pem
+admin-tools/keys/fingerprint.txt
+electron/admin-tools/keys/private.pem
+electron/admin-tools/keys/fingerprint.txt
+
+# Scripts de génération de codes (tokony ho afenina)
+admin-tools/generate-activation-code.cjs
+admin-tools/build-codes-db.cjs
+admin-tools/generate-keys.cjs
+admin-tools/generate-masse.cjs
+admin-tools/generate-revoked.cjs
+
+# ⭐ FANAMPINY: Scripts ao amin'ny electron/admin-tools
+electron/admin-tools/generate-*.cjs
+electron/admin-tools/build-codes-db.cjs
+
+# Exports de codes d'activation (tokony tsy hita)
+admin-tools/exports/*
+!admin-tools/exports/.gitkeep
+electron/admin-tools/exports/*
+!electron/admin-tools/exports/.gitkeep
+
+# Licence files (production)
+*.lic
+license.lic
+
+# Fichiers temporaires
+tmp/
+temp/
+
+# ============================================================
+# ⭐ FICHIERS ILAINA AMIN'NY BUILD (TOKONY HIDITRA ANY AMIN'NY REPO)
+# ⭐ Ireto manaraka ireto TSY ATAO IGNORE:
+#   - electron/keys/public.pem  (vérification signature)
+#   - electron/keys/codes.db.enc (activation offline)
+#   - generated/hashes.json      (intégrité)
+#   - generated/hashes.sig       (intégrité)
+# ⚠️ Raha tsy misy ireto dia tsy handeha ny build
+# ============================================================electron/keys/codes.db.enc

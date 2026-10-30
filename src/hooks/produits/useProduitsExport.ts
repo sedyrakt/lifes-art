@@ -1,0 +1,273 @@
+// src/hooks/produits/useProduitsExport.ts
+// ⭐ FIX: Nesorina ny filtre période — affichage ny produits REHETRA
+// ⭐ FIX: PDF — Total produits + Valeur stock ihany (tsy misy Période intsony)
+// ⭐ FIX: ESORINA `filterStatus` (hard delete — tsy misy statut intsony)
+
+import { useCallback } from 'react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { saveFileWithDialog } from '../../utils/saveFileWithDialog';
+import { formatNumberNoSlash, toLocalDateString } from './formatters';
+import { SORT_MAP } from './constants';
+import type { ProduitFilters, SortOption } from './types';
+
+interface ExportParams {
+  debouncedSearch: string;
+  sortOption: SortOption;
+  filters: ProduitFilters;
+}
+
+export const useProduitsExport = ({ debouncedSearch, sortOption, filters }: ExportParams) => {
+  // ⭐ Nalaina ny produits REHETRA (tsy misy filtre période / statut)
+  const fetchAllForExport = useCallback(async () => {
+    if (!window.api?.products?.getAll) return [];
+    const sort = SORT_MAP[sortOption] || SORT_MAP['Nom (A-Z)'];
+    const params = {
+      page: 1,
+      limit: 100000,
+      search: debouncedSearch || undefined,
+      sortBy: sort.field,
+      sortOrder: sort.direction,
+      // ❌ ESORINA: status: filters?.filterStatus || undefined,
+      categorieId: filters?.filterCategorie || undefined,
+      prixMin: filters?.prixMin || undefined,
+      prixMax: filters?.prixMax || undefined,
+      // ⭐ Nesorina: dateFrom / dateTo
+    };
+    const result = await window.api.products.getAll(params);
+    if (result?.success) return result.data || [];
+    return [];
+  }, [debouncedSearch, sortOption, filters]);
+
+  // ⭐ Export Excel
+  const exportToExcel = useCallback(async () => {
+    const data = await fetchAllForExport();
+    const rows = data.length
+      ? data.map((p: any) => ({
+          'Code': p.code || '',
+          'Nom': p.nom || '',
+          'Description': p.description || '',
+          'Catégorie': p.categorie_nom || '',
+          'Fournisseur': p.fournisseur_nom || '',
+          'Prix achat': p.prix_achat || 0,
+          'Prix vente': p.prix_vente || 0,
+          'Stock': p.quantite_stock || 0,
+          'Unité': p.unite || '',
+          'TVA': p.tva_rate || 0,
+        }))
+      : [{ 'Code': 'Aucun produit', 'Nom': '', 'Description': '', 'Catégorie': '', 'Fournisseur': '', 'Prix achat': 0, 'Prix vente': 0, 'Stock': 0, 'Unité': '', 'TVA': 0 }];
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Produits');
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    const totalValeur = data.reduce((sum: number, p: any) =>
+      sum + (Number(p.quantite_stock || 0) * Number(p.prix_vente || 0)), 0);
+    XLSX.utils.sheet_add_json(ws, [{
+      'Code': 'TOTAL', 'Nom': '', 'Description': '', 'Catégorie': '', 'Fournisseur': '',
+      'Prix achat': '', 'Prix vente': formatNumberNoSlash(totalValeur), 'Stock': '',
+      'Unité': '', 'TVA': '',
+    }], { origin: -1, skipHeader: true });
+
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const fileName = `produits_${toLocalDateString()}.xlsx`;
+    const result = await saveFileWithDialog(wbout, fileName, [{ name: 'Excel', extensions: ['xlsx'] }]);
+    if (!result.success) { if (result.canceled) return result; throw new Error(result.error || 'Erreur'); }
+    return result;
+  }, [fetchAllForExport]);
+
+  // ⭐⭐⭐ PDF — Border mainty, tsy misy Période / Statut ⭐⭐⭐
+  const exportToPDF = useCallback(async () => {
+    const data = await fetchAllForExport();
+
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    const pageWidth  = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 14;
+
+    const nowStr = new Date().toLocaleString('fr-FR');
+
+    const TABLE_STYLE = {
+      styles: {
+        fontSize: 9,
+        cellPadding: 2.2,
+        textColor: [0, 0, 0] as [number, number, number],
+        fillColor: [255, 255, 255] as [number, number, number],
+        lineColor: [0, 0, 0] as [number, number, number],
+        lineWidth: 0.25,
+      },
+      headStyles: {
+        fillColor: [255, 255, 255] as [number, number, number],
+        textColor: [0, 0, 0] as [number, number, number],
+        fontStyle: 'bold' as const,
+        lineColor: [0, 0, 0] as [number, number, number],
+        lineWidth: 0.5,
+      },
+      alternateRowStyles: { fillColor: [255, 255, 255] as [number, number, number] },
+    };
+
+    // ⭐ ESORINA ny colonne "Statut"
+    const columns = ['Code', 'Nom', 'Catégorie', 'Prix achat', 'Prix vente', 'Stock', 'Unité', 'TVA'];
+
+    const rows = data.length
+      ? data.map((p: any) => [
+          p.code || '',
+          p.nom || '',
+          p.categorie_nom || '',
+          formatNumberNoSlash(Number(p.prix_achat || 0)),
+          formatNumberNoSlash(Number(p.prix_vente || 0)),
+          formatNumberNoSlash(Number(p.quantite_stock || 0)),
+          p.unite || '',
+          p.tva_rate != null ? `${Number(p.tva_rate)}%` : '0%',
+        ])
+      : [['Aucun produit', '', '', '0', '0', '0', '', '0%']];
+
+    const totalValeur = data.reduce((sum: number, p: any) =>
+      sum + (Number(p.quantite_stock || 0) * Number(p.prix_vente || 0)), 0);
+    const totalProduits = data.length;
+
+    // ═══════════════════════════════════════════════════════════
+    // ⭐ HEADER
+    // ═══════════════════════════════════════════════════════════
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, pageWidth, 16, 'F');
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.4);
+    doc.line(0, 16, pageWidth, 16);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LifesArt — Produits', margin, 10);
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Généré le ${nowStr}`, pageWidth - margin, 10, { align: 'right' });
+
+    // ═══════════════════════════════════════════════════════════
+    // ⭐ TITRE
+    // ═══════════════════════════════════════════════════════════
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Rapport des produits', margin, 26);
+
+    // ═══════════════════════════════════════════════════════════
+    // ⭐ TOTAL — tsy misy Période
+    // ═══════════════════════════════════════════════════════════
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    doc.text(
+      `Total : ${totalProduits} produit${totalProduits > 1 ? 's' : ''}  ·  Valeur stock : ${formatNumberNoSlash(totalValeur)} Ar`,
+      margin,
+      32
+    );
+
+    // ═══════════════════════════════════════════════════════════
+    // ⭐ TABLE
+    // ═══════════════════════════════════════════════════════════
+    autoTable(doc, {
+      ...TABLE_STYLE,
+      startY: 38,
+      head: [columns],
+      body: rows,
+      theme: 'grid',
+      margin: { left: margin, right: margin },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 55 },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 32, halign: 'right' },
+        4: { cellWidth: 32, halign: 'right', fontStyle: 'bold' },
+        5: { cellWidth: 26, halign: 'right' },
+        6: { cellWidth: 26 },
+        7: { cellWidth: 28, halign: 'right' },
+      },
+      foot: [[
+        { content: '', colSpan: 4 },
+        {
+          content: `VALEUR STOCK : ${formatNumberNoSlash(totalValeur)} Ar`,
+          colSpan: 2,
+          styles: { halign: 'right' as const, fontStyle: 'bold' as const, fontSize: 9 },
+        },
+        { content: '', colSpan: 2 },
+      ]],
+      footStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+        fontSize: 9,
+        halign: 'right',
+        lineColor: [0, 0, 0],
+        lineWidth: 0.5,
+        cellPadding: { top: 2.2, right: 2.5, bottom: 2.2, left: 2.5 },
+      },
+      showHead: 'firstPage',
+      showFoot: 'lastPage',
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // ⭐ FOOTER (page numbers)
+    // ═══════════════════════════════════════════════════════════
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(80, 80, 80);
+      doc.text(
+        `LifesArt ERP — Page ${i} / ${pageCount}`,
+        pageWidth / 2,
+        pageHeight - 6,
+        { align: 'center' }
+      );
+    }
+
+    const pdfArrayBuffer = doc.output('arraybuffer');
+    const fileName = `produits_${toLocalDateString()}.pdf`;
+    const result = await saveFileWithDialog(pdfArrayBuffer, fileName, [{ name: 'PDF', extensions: ['pdf'] }]);
+    if (!result.success) { if (result.canceled) return result; throw new Error(result.error || 'Erreur'); }
+    return result;
+  }, [fetchAllForExport]);
+
+  // ⭐ Export CSV
+  const exportToCSV = useCallback(async () => {
+    const data = await fetchAllForExport();
+    // ⭐ ESORINA ny colonne "Statut"
+    const headers = ['Code', 'Nom', 'Catégorie', 'Prix achat', 'Prix vente', 'Stock', 'Unité', 'TVA'];
+    const escapeCSV = (value: any) => {
+      if (value === undefined || value === null) return '""';
+      return `"${String(value).replace(/"/g, '""')}"`;
+    };
+    const rows = data.length
+      ? data.map((p: any) => [
+          p.code || '', p.nom || '', p.categorie_nom || '',
+          p.prix_achat || 0, p.prix_vente || 0, p.quantite_stock || 0,
+          p.unite || '', p.tva_rate || 0,
+        ])
+      : [['Aucun produit', '', '', 0, 0, 0, '', 0]];
+
+    const totalValeur = data.reduce((sum: number, p: any) =>
+      sum + (Number(p.quantite_stock || 0) * Number(p.prix_vente || 0)), 0);
+    const totalRow = ['', '', '', '', `VALEUR STOCK: ${formatNumberNoSlash(totalValeur)} Ar`, '', '', ''];
+
+    const csv = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(r => r.map(escapeCSV).join(',')).concat([totalRow.map(escapeCSV).join(',')]),
+    ].join('\n');
+
+    const fileName = `produits_${toLocalDateString()}.csv`;
+    const result = await saveFileWithDialog(csv, fileName, [{ name: 'CSV', extensions: ['csv'] }]);
+    if (!result.success) { if (result.canceled) return result; throw new Error(result.error || 'Erreur'); }
+    return result;
+  }, [fetchAllForExport]);
+
+  return {
+    exportToExcel,
+    exportToPDF,
+    exportToCSV,
+    fetchAllForExport,
+  };
+};

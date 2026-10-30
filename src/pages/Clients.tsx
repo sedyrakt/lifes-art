@@ -1,0 +1,550 @@
+// src/pages/Clients.tsx
+// ⭐ FIX: manampy `total_commandes` + `globalStats` + `hasActiveFilter`
+// ⭐ FIX: Stats cards (Total achats, etc.) manaraka ny filtre (dynamicStats)
+
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
+import { useClientsData, ExportPeriod } from '../hooks/useClientsData';
+import ClientsHeader from '../components/clients/ClientsHeader';
+import ClientsStats from '../components/clients/ClientsStats';
+import ClientsTable from '../components/clients/ClientsTable';
+import ClientsPagination from '../components/clients/ClientsPagination';
+import ClientsModalForm from '../components/clients/ClientsModalForm';
+import ClientsViewModal from '../components/clients/ClientsViewModal';
+import ClientsSearchBar from '../components/clients/ClientsSearchBar';
+import ConfirmModal from '../components/common/ConfirmModal';
+import SuccessModal from '../components/common/SuccessModal';
+import ErrorModal from '../components/common/ErrorModal';
+
+// ============================================================
+// ⭐ SKELETON LOADER FULL-PAGE
+// ============================================================
+
+const SkeletonBlock: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`animate-pulse rounded-md ${className}`} />
+);
+
+const ClientsPageSkeleton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+  const cardBg = isDark ? 'bg-white/[0.04]' : 'bg-slate-100';
+  const surfaceBg = isDark ? 'bg-[#0F172A]' : 'bg-white';
+  const borderColor = isDark ? 'border-white/[0.10]' : 'border-slate-200';
+  const rowBorderColor = isDark ? 'border-white/[0.06]' : 'border-slate-100';
+  const pageBg = isDark ? '#0F172A' : '#EEF2FF';
+
+  return (
+    <main className="min-h-full w-full transition-colors duration-300" style={{ background: pageBg }}>
+      <div className="mx-auto w-full max-w-[1600px] space-y-2 px-2 py-4 sm:px-3 lg:px-5">
+        <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border-[0.5px] p-4 ${surfaceBg} ${borderColor}`}>
+          <div className="flex items-center gap-3">
+            <SkeletonBlock className={`h-10 w-10 rounded-lg ${cardBg}`} />
+            <div className="space-y-2">
+              <SkeletonBlock className={`h-4 w-40 ${cardBg}`} />
+              <SkeletonBlock className={`h-3 w-56 ${cardBg}`} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <SkeletonBlock className={`h-9 w-9 rounded-lg ${cardBg}`} />
+            <SkeletonBlock className={`h-9 w-32 rounded-lg ${cardBg}`} />
+            <SkeletonBlock className={`h-9 w-40 rounded-lg ${cardBg}`} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={`rounded-xl border-[0.5px] p-4 ${surfaceBg} ${borderColor}`}>
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <SkeletonBlock className={`h-3 w-20 ${cardBg}`} />
+                  <SkeletonBlock className={`h-6 w-24 ${cardBg}`} />
+                </div>
+                <SkeletonBlock className={`h-10 w-10 rounded-lg ${cardBg}`} />
+              </div>
+              <div className="mt-3">
+                <SkeletonBlock className={`h-2 w-full rounded-full ${cardBg}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className={`flex flex-wrap items-center gap-2 rounded-xl border-[0.5px] p-3 ${surfaceBg} ${borderColor}`}>
+          <SkeletonBlock className={`h-10 flex-1 min-w-[200px] rounded-lg ${cardBg}`} />
+          <SkeletonBlock className={`h-10 w-[140px] rounded-lg ${cardBg}`} />
+          <SkeletonBlock className={`h-10 w-[150px] rounded-lg ${cardBg}`} />
+        </div>
+
+        <section className={`relative overflow-hidden rounded-2xl border-[0.5px] ${surfaceBg} ${borderColor}`}>
+          <div className={`flex items-center gap-3 border-b px-3 py-2.5 ${rowBorderColor}`}>
+            <SkeletonBlock className={`h-4 w-4 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-24 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-32 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-20 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-24 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-20 ${cardBg}`} />
+            <div className="ml-auto">
+              <SkeletonBlock className={`h-3 w-16 ${cardBg}`} />
+            </div>
+          </div>
+
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className={`flex items-center gap-3 border-b px-3 py-3 ${rowBorderColor}`}>
+              <SkeletonBlock className={`h-4 w-4 rounded ${cardBg}`} />
+              <div className="flex-1 space-y-1.5">
+                <SkeletonBlock className={`h-3.5 w-40 ${cardBg}`} />
+                <SkeletonBlock className={`h-2.5 w-20 ${cardBg}`} />
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <SkeletonBlock className={`h-3.5 w-32 ${cardBg}`} />
+                <SkeletonBlock className={`h-2.5 w-24 ${cardBg}`} />
+              </div>
+              <SkeletonBlock className={`h-5 w-20 rounded ${cardBg}`} />
+              <div className="flex-1 space-y-1.5">
+                <SkeletonBlock className={`h-3.5 w-24 ${cardBg}`} />
+                <SkeletonBlock className={`h-2.5 w-16 ${cardBg}`} />
+              </div>
+              <SkeletonBlock className={`h-3.5 w-24 ${cardBg}`} />
+              <SkeletonBlock className={`h-5 w-12 rounded ${cardBg}`} />
+              <div className="ml-auto">
+                <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+              </div>
+            </div>
+          ))}
+
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2.5 ${rowBorderColor}`}>
+            <div className="flex items-center gap-3">
+              <SkeletonBlock className={`h-3.5 w-24 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-20 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-20 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-20 ${cardBg}`} />
+            </div>
+            <SkeletonBlock className={`h-3.5 w-28 ${cardBg}`} />
+          </div>
+        </section>
+
+        <div className={`flex items-center justify-between rounded-2xl border-[0.5px] px-3 py-2.5 ${surfaceBg} ${borderColor}`}>
+          <SkeletonBlock className={`h-3.5 w-32 ${cardBg}`} />
+          <div className="flex items-center gap-1.5">
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+          </div>
+        </div>
+
+        <div className="flex justify-center pb-1">
+          <SkeletonBlock className={`h-3 w-48 ${cardBg}`} />
+        </div>
+
+      </div>
+    </main>
+  );
+};
+
+// ============================================================
+// COMPOSANT
+// ============================================================
+
+const Clients: React.FC = () => {
+  const { isDark } = useTheme();
+  const {
+    clients, loading, refreshing, totalItems, totalPages, currentPage, setCurrentPage,
+    filters, setFilters, sortOption, setSortOption, refresh, loadData, getStats,
+    getTypeColor, getTypeIcon, ITEMS_PER_PAGE,
+    createClient, updateClient, deleteClient, bulkDelete, bulkUpdateType,
+    getClientById,
+    exportPeriod, setExportPeriod, exportCustomDate, setExportCustomDate,
+    exportToExcel, exportToPDF, exportToCSV,
+  } = useClientsData();
+
+  // ⭐ VAOVAO: `total_commandes`
+  const [reelStats, setReelStats] = useState({
+    total: 0,
+    particuliers: 0,
+    entreprises: 0,
+    avec_telephone: 0,
+    total_achats: 0,
+    total_commandes: 0,
+  });
+
+  const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showBulkConfirmModal, setShowBulkConfirmModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [editingClient, setEditingClient] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkTargetIds, setBulkTargetIds] = useState<number[]>([]);
+  const [bulkActionType, setBulkActionType] = useState<'delete' | 'update_type'>('delete');
+  const [bulkTargetType, setBulkTargetType] = useState('');
+  const [successTitle, setSuccessTitle] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorTitle, setErrorTitle] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const showSuccess = useCallback((t: string, m: string) => {
+    setSuccessTitle(t); setSuccessMessage(m); setShowSuccessModal(true);
+  }, []);
+  const showError = useCallback((t: string, m: string) => {
+    setErrorTitle(t); setErrorMessage(m); setShowErrorModal(true);
+  }, []);
+
+  // ⭐ Fetch reel stats
+  const fetchReelStats = useCallback(async () => {
+    try {
+      const data = await getStats();
+      if (data) {
+        setReelStats({
+          total: Number(data.total) || 0,
+          particuliers: Number(data.particuliers) || 0,
+          entreprises: Number(data.entreprises) || 0,
+          avec_telephone: Number(data.avec_telephone) || 0,
+          total_achats: Number(data.total_achats) || clients.reduce((sum, c) => sum + (Number(c.total_achats) || 0), 0),
+          total_commandes: Number(data.total_commandes) || 0,
+        });
+      } else {
+        setReelStats({
+          total: clients.length,
+          particuliers: clients.filter(c => c.type === 'Particulier').length,
+          entreprises: clients.filter(c => c.type === 'Entreprise').length,
+          avec_telephone: clients.filter(c => c.email || c.telephone).length,
+          total_achats: clients.reduce((sum, c) => sum + (Number(c.total_achats) || 0), 0),
+          total_commandes: 0,
+        });
+      }
+    } catch (err) {
+      console.error('❌ Stats:', err);
+      setReelStats({
+        total: clients.length,
+        particuliers: clients.filter(c => c.type === 'Particulier').length,
+        entreprises: clients.filter(c => c.type === 'Entreprise').length,
+        avec_telephone: clients.filter(c => c.email || c.telephone).length,
+        total_achats: clients.reduce((sum, c) => sum + (Number(c.total_achats) || 0), 0),
+        total_commandes: 0,
+      });
+    }
+  }, [getStats, clients]);
+
+  useEffect(() => { if (!loading) fetchReelStats(); }, [loading, clients, fetchReelStats]);
+
+  // ⭐ hasActiveFilter
+  const hasActiveFilter = useMemo(() => Boolean(
+    filters.searchTerm ||
+    filters.filterType !== 'Tous' ||
+    filters.filterVille ||
+    filters.filterPays ||
+    filters.filterDateFrom ||
+    filters.filterDateTo
+  ), [filters]);
+
+  // ⭐ NOUVEAU: Calcul dynamique des stats (respecte les filtres si actifs)
+  const dynamicStats = useMemo(() => {
+    if (hasActiveFilter) {
+      return {
+        total: totalItems, // Nombre total filtré par le hook
+        particuliers: clients.filter((c: any) => c.type === 'Particulier').length,
+        entreprises: clients.filter((c: any) => c.type === 'Entreprise').length,
+        totalAchats: clients.reduce((sum: number, c: any) => sum + Number(c.total_achats || 0), 0),
+      };
+    }
+    return {
+      total: reelStats.total,
+      particuliers: reelStats.particuliers,
+      entreprises: reelStats.entreprises,
+      totalAchats: reelStats.total_achats,
+    };
+  }, [hasActiveFilter, totalItems, clients, reelStats]);
+
+  // ⭐ globalStats ho an'ny footer
+  const globalStats = useMemo(() => ({
+    total: dynamicStats.total,
+    particuliers: dynamicStats.particuliers,
+    entreprises: dynamicStats.entreprises,
+    avecContact: reelStats.avec_telephone,
+    totalAchats: dynamicStats.totalAchats,
+    totalCommandes: reelStats.total_commandes,
+  }), [dynamicStats, reelStats.avec_telephone, reelStats.total_commandes]);
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    setSelectedIds(checked ? new Set(clients.map((c: any) => c.id)) : new Set());
+  }, [clients]);
+
+  const handleSelectOne = useCallback((id: number, checked: boolean) => {
+    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  }, []);
+
+  const handleViewClient = useCallback(async (client: any) => {
+    if (client.nb_commandes !== undefined) {
+      setSelectedClient(client); setShowViewModal(true);
+    } else {
+      const enriched = await getClientById(client.id);
+      if (enriched) setSelectedClient(enriched);
+      else setSelectedClient(client);
+      setShowViewModal(true);
+    }
+  }, [getClientById]);
+
+  const handleEditClient = useCallback((client: any) => {
+    setEditingClient(client); setShowModal(true);
+  }, []);
+
+  const handleDeleteClick = useCallback((client: any) => {
+    setDeleteTarget(client); setShowDeleteModal(true);
+  }, []);
+
+  const handleOpenAddModal = useCallback(() => {
+    setEditingClient(null); setShowModal(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setShowModal(false); setEditingClient(null);
+  }, []);
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fd = new FormData(e.target as HTMLFormElement);
+    const data: any = {
+      nom: String(fd.get('nom') || '').trim(),
+      email: String(fd.get('email') || '').trim(),
+      telephone: String(fd.get('telephone') || '').trim(),
+      adresse: String(fd.get('adresse') || '').trim(),
+      ville: String(fd.get('ville') || '').trim(),
+      code_postal: String(fd.get('code_postal') || '').trim(),
+      pays: String(fd.get('pays') || '').trim() || 'Madagascar',
+      type: String(fd.get('type') || '').trim() || 'Particulier',
+    };
+    if (!data.nom) { showError('Champ requis', 'Le nom est obligatoire.'); return; }
+    try {
+      if (editingClient) {
+        await updateClient(editingClient.id, data);
+        showSuccess('Client modifié', `"${data.nom}" mis à jour.`);
+      } else {
+        await createClient(data);
+        showSuccess('Client créé', `"${data.nom}" enregistré.`);
+      }
+      setShowModal(false); setEditingClient(null); await fetchReelStats();
+    } catch (err: any) { showError('Erreur', err.message); }
+  }, [editingClient, updateClient, createClient, showSuccess, showError, fetchReelStats]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteClient(deleteTarget.id);
+      showSuccess('Client supprimé', `"${deleteTarget.nom}" supprimé.`);
+      setShowDeleteModal(false); setDeleteTarget(null); setSelectedIds(new Set()); await fetchReelStats();
+    } catch (err: any) { showError('Erreur', err.message); }
+  }, [deleteTarget, deleteClient, showSuccess, showError, fetchReelStats]);
+
+  const handleBulkUpdateType = useCallback((ids: number[], newType: string) => {
+    if (ids.length) {
+      setBulkTargetIds(ids); setBulkTargetType(newType);
+      setBulkActionType('update_type'); setShowBulkConfirmModal(true);
+    }
+  }, []);
+
+  const handleBulkDelete = useCallback((ids: number[]) => {
+    if (ids.length) {
+      setBulkTargetIds(ids); setBulkActionType('delete'); setShowBulkConfirmModal(true);
+    }
+  }, []);
+
+  const handleConfirmBulkAction = useCallback(async () => {
+    if (!bulkTargetIds.length) return;
+    try {
+      if (bulkActionType === 'delete') {
+        await bulkDelete(bulkTargetIds);
+        setSelectedIds(new Set());
+        showSuccess('Suppression en lot', `${bulkTargetIds.length} client(s) supprimé(s).`);
+      } else if (bulkActionType === 'update_type') {
+        await bulkUpdateType(bulkTargetIds, bulkTargetType);
+        setSelectedIds(new Set());
+        showSuccess('Mise à jour en lot', `${bulkTargetIds.length} client(s) changé(s) en "${bulkTargetType}".`);
+      }
+      await fetchReelStats();
+    } catch (err: any) { showError("Erreur", err.message); }
+    finally {
+      setShowBulkConfirmModal(false); setBulkTargetIds([]);
+      setBulkTargetType(''); setBulkActionType('delete');
+    }
+  }, [bulkTargetIds, bulkActionType, bulkTargetType, bulkDelete, bulkUpdateType, showSuccess, showError, fetchReelStats]);
+
+  const handleRefresh = useCallback(async () => {
+    try { await refresh(); await fetchReelStats(); }
+    catch (err) { console.error('❌ Refresh:', err); }
+  }, [refresh, fetchReelStats]);
+
+  const handleSearchChange = useCallback((v: string) => {
+    setFilters(prev => ({ ...prev, searchTerm: v }));
+  }, [setFilters]);
+
+  const handleFilterTypeChange = useCallback((v: string) => {
+    setFilters(prev => ({ ...prev, filterType: v }));
+  }, [setFilters]);
+
+  const handleSortChange = useCallback((v: string) => {
+    setSortOption(v as any);
+  }, [setSortOption]);
+
+  const handleDateFromChange = useCallback((v: string) => {
+    setFilters(prev => ({ ...prev, filterDateFrom: v }));
+  }, [setFilters]);
+
+  const handleResetFilters = useCallback(() => {
+    setFilters({
+      searchTerm: '', filterType: 'Tous', filterVille: '',
+      filterPays: '', filterDateFrom: '', filterDateTo: '',
+    });
+    setCurrentPage(1);
+  }, [setFilters, setCurrentPage]);
+
+  if (loading && clients.length === 0) {
+    return <ClientsPageSkeleton isDark={isDark} />;
+  }
+
+  return (
+    <main className="min-h-full w-full transition-colors duration-300" style={{ background: isDark ? '#0F172A' : '#EEF2FF' }}>
+      <div className="mx-auto w-full max-w-[1600px] space-y-2 px-2 py-4 sm:px-3 lg:px-5">
+        <ClientsHeader
+          onAddClient={handleOpenAddModal}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          isLoading={loading}
+          totalItems={dynamicStats.total} // ⭐ Mampiasa dynamicStats
+        />
+
+        {/* ⭐ Mampiasa dynamicStats ho an'ny statistika */}
+        <ClientsStats
+          totalClients={dynamicStats.total}
+          particuliers={dynamicStats.particuliers}
+          entreprises={dynamicStats.entreprises}
+          totalAchats={dynamicStats.totalAchats}
+          refreshing={refreshing}
+        />
+
+        <ClientsSearchBar
+          searchTerm={filters.searchTerm ?? ''}
+          onSearchChange={handleSearchChange}
+          filterType={filters.filterType ?? 'Tous'}
+          onFilterTypeChange={handleFilterTypeChange}
+          sortOption={sortOption}
+          onSortChange={handleSortChange}
+        />
+
+        <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_-4px_rgba(79,70,229,0.08)] transition-all duration-300 dark:border-white/[0.1] dark:bg-[#0F172A] dark:shadow-[0_4px_24px_-4px_rgba(0,0,0,0.35)]">
+          {refreshing && (
+            <div className="absolute left-0 right-0 top-0 z-20 h-[3px] overflow-hidden rounded-t-2xl bg-transparent">
+              <div className="h-full w-1/3 animate-[loading_1.2s_ease-in-out_infinite] rounded-full bg-brand-500" />
+            </div>
+          )}
+
+          <ClientsTable
+            clients={clients}
+            onView={handleViewClient}
+            onEdit={handleEditClient}
+            onDelete={handleDeleteClick}
+            onAdd={handleOpenAddModal}
+            getTypeColor={getTypeColor}
+            getTypeIcon={getTypeIcon}
+            selectedIds={selectedIds}
+            onSelectAll={handleSelectAll}
+            onSelectOne={handleSelectOne}
+            onBulkDelete={handleBulkDelete}
+            onBulkUpdateType={handleBulkUpdateType}
+            globalStats={globalStats}
+            hasActiveFilter={hasActiveFilter}
+          />
+        </section>
+
+        {!loading && totalItems > 0 && (
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-[0_2px_10px_-2px_rgba(79,70,229,0.06)] transition-all duration-300 dark:border-white/[0.1] dark:bg-[#0F172A] dark:shadow-[0_2px_12px_-2px_rgba(0,0,0,0.25)]">
+            <ClientsPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
+
+        {!loading && totalItems > 0 && (
+          <div className="flex justify-center pb-1">
+            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+              {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, totalItems)} – {Math.min(currentPage * ITEMS_PER_PAGE, totalItems)} sur {totalItems} clients
+            </span>
+          </div>
+        )}
+      </div>
+
+      <ClientsModalForm
+        isOpen={showModal}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmit}
+        editingClient={editingClient}
+        isDark={isDark}
+      />
+
+      {showViewModal && selectedClient && (
+        <ClientsViewModal
+          client={selectedClient}
+          onClose={() => setShowViewModal(false)}
+          onEdit={() => { setShowViewModal(false); handleEditClient(selectedClient); }}
+          getTypeColor={getTypeColor}
+          getTypeIcon={getTypeIcon}
+          isDark={isDark}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }}
+        onConfirm={handleConfirmDelete}
+        title="Suppression"
+        message={`Supprimer "${deleteTarget?.nom || ''}" ?`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        confirmColor="red"
+        isDark={isDark}
+      />
+
+      <ConfirmModal
+        isOpen={showBulkConfirmModal}
+        onClose={() => {
+          setShowBulkConfirmModal(false); setBulkTargetIds([]);
+          setBulkTargetType(''); setBulkActionType('delete');
+        }}
+        onConfirm={handleConfirmBulkAction}
+        title="Opération en lot"
+        message={bulkActionType === 'delete'
+          ? `Supprimer ${bulkTargetIds.length} client(s) ?`
+          : `Changer ${bulkTargetIds.length} client(s) en "${bulkTargetType}" ?`}
+        confirmText="Confirmer"
+        cancelText="Annuler"
+        confirmColor={bulkActionType === 'delete' ? 'red' : 'green'}
+        isDark={isDark}
+      />
+
+      <SuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title={successTitle}
+        message={successMessage}
+        buttonText="OK"
+        autoCloseDelay={3000}
+        zIndex={100000}
+      />
+
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title={errorTitle}
+        message={errorMessage}
+        buttonText="OK"
+        autoCloseDelay={4000}
+        zIndex={100000}
+      />
+    </main>
+  );
+};
+
+export default Clients;

@@ -1,0 +1,494 @@
+// src/pages/Fournisseurs.tsx
+// ⭐ FIX: Manampy `globalStats` sy `hasActiveFilter` amin'ny FournisseursTable
+//    → Total global + avecTelephone + avecAdresse
+// ⭐ FIX: reelStats misy avecTelephone, avecAdresse
+// ⭐ NOUVEAU: Skeleton loader full-page (tsoloana ny FournisseursSkeleton table kely)
+
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useTheme } from '../contexts/ThemeContext';
+import { useFournisseursData, ExportPeriod } from '../hooks/useFournisseursData';
+import FournisseursHeader from '../components/fournisseurs/FournisseursHeader';
+import FournisseursStats from '../components/fournisseurs/FournisseursStats';
+import FournisseursSearchBar from '../components/fournisseurs/FournisseursSearchBar';
+import { FournisseursTable, FournisseursPagination, FournisseursModalForm, FournisseursViewModal } from '../components/fournisseurs';
+import ConfirmModal from '../components/common/ConfirmModal';
+import SuccessModal from '../components/common/SuccessModal';
+import ErrorModal from '../components/common/ErrorModal';
+
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+// ⭐ VAOVAO: ReelStats misy avecTelephone + avecAdresse
+const INITIAL_STATS = {
+  total: 0,
+  avecContact: 0,
+  avecTelephone: 0,
+  avecEmail: 0,
+  avecAdresse: 0,
+};
+
+// ============================================================
+// ⭐ SKELETON LOADER FULL-PAGE
+// ============================================================
+
+const SkeletonBlock: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`animate-pulse rounded-md ${className}`} />
+);
+
+const FournisseursPageSkeleton: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+  const cardBg = isDark ? 'bg-white/[0.04]' : 'bg-slate-100';
+  const surfaceBg = isDark ? 'bg-[#0F172A]' : 'bg-white';
+  const borderColor = isDark ? 'border-white/[0.10]' : 'border-slate-200';
+  const rowBorderColor = isDark ? 'border-white/[0.06]' : 'border-slate-100';
+  const pageBg = isDark ? '#0F172A' : '#EEF2FF';
+
+  return (
+    <main className="min-h-full w-full transition-colors duration-300" style={{ background: pageBg }}>
+      <div className="mx-auto w-full max-w-[1600px] space-y-2 px-2 py-4 sm:px-3 lg:px-5">
+
+        {/* ⭐ HEADER SKELETON */}
+        <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border-[0.5px] p-4 ${surfaceBg} ${borderColor}`}>
+          <div className="flex items-center gap-3">
+            <SkeletonBlock className={`h-10 w-10 rounded-lg ${cardBg}`} />
+            <div className="space-y-2">
+              <SkeletonBlock className={`h-4 w-40 ${cardBg}`} />
+              <SkeletonBlock className={`h-3 w-56 ${cardBg}`} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <SkeletonBlock className={`h-9 w-9 rounded-lg ${cardBg}`} />
+            <SkeletonBlock className={`h-9 w-32 rounded-lg ${cardBg}`} />
+            <SkeletonBlock className={`h-9 w-40 rounded-lg ${cardBg}`} />
+          </div>
+        </div>
+
+        {/* ⭐ STATS CARDS SKELETON (3 cards) */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={`rounded-xl border-[0.5px] p-4 ${surfaceBg} ${borderColor}`}>
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <SkeletonBlock className={`h-3 w-20 ${cardBg}`} />
+                  <SkeletonBlock className={`h-6 w-28 ${cardBg}`} />
+                </div>
+                <SkeletonBlock className={`h-10 w-10 rounded-lg ${cardBg}`} />
+              </div>
+              <div className="mt-3">
+                <SkeletonBlock className={`h-2 w-full rounded-full ${cardBg}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ⭐ SEARCHBAR SKELETON */}
+        <div className={`flex flex-wrap items-center gap-2 rounded-xl border-[0.5px] p-3 ${surfaceBg} ${borderColor}`}>
+          <SkeletonBlock className={`h-10 flex-1 min-w-[200px] rounded-lg ${cardBg}`} />
+          <SkeletonBlock className={`h-10 w-[150px] rounded-lg ${cardBg}`} />
+        </div>
+
+        {/* ⭐ TABLE SKELETON */}
+        <section className={`relative overflow-hidden rounded-2xl border-[0.5px] ${surfaceBg} ${borderColor}`}>
+          {/* Table header */}
+          <div className={`flex items-center gap-3 border-b px-3 py-2.5 ${rowBorderColor}`}>
+            <SkeletonBlock className={`h-4 w-4 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-24 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-24 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-24 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-32 ${cardBg}`} />
+            <SkeletonBlock className={`h-3 w-20 ${cardBg}`} />
+            <div className="ml-auto">
+              <SkeletonBlock className={`h-3 w-16 ${cardBg}`} />
+            </div>
+          </div>
+
+          {/* Table rows */}
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className={`flex items-center gap-3 border-b px-3 py-3 ${rowBorderColor}`}>
+              <SkeletonBlock className={`h-4 w-4 rounded ${cardBg}`} />
+              <div className="flex-1 space-y-1.5">
+                <SkeletonBlock className={`h-3.5 w-40 ${cardBg}`} />
+                <SkeletonBlock className={`h-2.5 w-20 ${cardBg}`} />
+              </div>
+              <SkeletonBlock className={`h-3.5 w-28 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-32 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-40 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-24 ${cardBg}`} />
+              <div className="ml-auto">
+                <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+              </div>
+            </div>
+          ))}
+
+          {/* Table footer */}
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2.5 ${rowBorderColor}`}>
+            <div className="flex items-center gap-3">
+              <SkeletonBlock className={`h-3.5 w-24 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-20 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-20 ${cardBg}`} />
+              <SkeletonBlock className={`h-3.5 w-20 ${cardBg}`} />
+            </div>
+            <SkeletonBlock className={`h-3.5 w-28 ${cardBg}`} />
+          </div>
+        </section>
+
+        {/* ⭐ PAGINATION SKELETON */}
+        <div className={`flex items-center justify-between rounded-2xl border-[0.5px] px-3 py-2.5 ${surfaceBg} ${borderColor}`}>
+          <SkeletonBlock className={`h-3.5 w-32 ${cardBg}`} />
+          <div className="flex items-center gap-1.5">
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+            <SkeletonBlock className={`h-7 w-7 rounded ${cardBg}`} />
+          </div>
+        </div>
+
+      </div>
+    </main>
+  );
+};
+
+// ============================================================
+// COMPOSANT
+// ============================================================
+
+const Fournisseurs: React.FC = () => {
+  const { isDark } = useTheme();
+  const {
+    fournisseurs, loading, refreshing, totalItems, totalPages, currentPage, setCurrentPage,
+    filters, setFilters, sortOption, setSortOption,
+    createFournisseur, updateFournisseur, deleteFournisseur,
+    bulkDelete, getStats, loadData,
+    exportPeriod, setExportPeriod, exportCustomDate, setExportCustomDate,
+    exportToExcel, exportToPDF, exportToCSV,
+  } = useFournisseursData();
+
+  // ⭐ VAOVAO: reelStats misy avecTelephone + avecAdresse
+  const [reelStats, setReelStats] = useState(INITIAL_STATS);
+
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePath, setImagePath] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [selectedFournisseur, setSelectedFournisseur] = useState<any>(null);
+  const [editingFournisseur, setEditingFournisseur] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [bulkDeleteTargetIds, setBulkDeleteTargetIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successTitle, setSuccessTitle] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorTitle, setErrorTitle] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // ⭐ VAOVAO: hasActiveFilter
+  const hasActiveFilter = useMemo(() => Boolean(
+    filters.searchTerm?.trim() ||
+    filters.email?.trim() ||
+    filters.telephone?.trim() ||
+    filters.dateFrom ||
+    filters.dateTo
+  ), [filters]);
+
+  // ⭐ VAOVAO: globalStats ho an'ny footer
+  const globalStats = useMemo(() => ({
+    total: reelStats.total,
+    avecContact: reelStats.avecContact,
+    avecTelephone: reelStats.avecTelephone,
+    avecEmail: reelStats.avecEmail,
+    avecAdresse: reelStats.avecAdresse,
+  }), [reelStats]);
+
+  const resetImageState = useCallback(() => {
+    setImagePreview((prev) => { if (prev?.startsWith('blob:')) try { URL.revokeObjectURL(prev); } catch {} return null; });
+    setImagePath(null); setImageError(null); setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
+  const handleImageChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setImageError('Format non supporté.'); if (fileInputRef.current) fileInputRef.current.value = ''; return; }
+    if (file.size > MAX_IMAGE_SIZE) { setImageError(`Fichier trop volumineux (max ${MAX_IMAGE_SIZE / (1024 * 1024)} MB).`); if (fileInputRef.current) fileInputRef.current.value = ''; return; }
+    setUploadingImage(true); setImageError(null); setUploadProgress(10);
+    const localUrl = URL.createObjectURL(file); setImagePreview(localUrl);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => { if (typeof reader.result !== 'string') reject(new Error('Format invalide')); else resolve(reader.result); };
+        reader.onerror = () => reject(new Error('Erreur lecture'));
+        reader.readAsDataURL(file);
+      });
+      setUploadProgress(45);
+      if (!window.api?.images?.upload) throw new Error('API images.upload indisponible');
+      const result = await window.api.images.upload(base64, 'fournisseurs');
+      if (!result?.success) throw new Error(result?.error || 'Erreur upload');
+      setUploadProgress(100);
+      setImagePath(typeof result.data === 'string' ? result.data : null);
+    } catch (error: any) {
+      console.error('❌ Upload:', error); setImageError(error.message); setImagePreview(null); setImagePath(null);
+    } finally {
+      setUploadingImage(false); setUploadProgress(0); if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleRemoveImage = useCallback(async () => {
+    try { if (imagePath && window.api?.images?.delete) await window.api.images.delete(imagePath); } catch {} finally { resetImageState(); }
+  }, [imagePath, resetImageState]);
+
+  // ⭐⭐⭐ FIX: fetchReelStats misy avecTelephone + avecAdresse ⭐⭐⭐
+  const fetchReelStats = useCallback(async () => {
+    try {
+      const data = await getStats();
+      setReelStats({
+        total: Number(data?.total) || 0,
+        avecContact: Number(data?.avec_contact) || 0,
+        avecTelephone: Number(data?.avec_telephone) || 0,
+        avecEmail: Number(data?.avec_email) || 0,
+        avecAdresse: Number(data?.avec_adresse) || 0,
+      });
+    } catch (err) {
+      console.error('❌ Stats:', err);
+      setReelStats(INITIAL_STATS);
+    }
+  }, [getStats]);
+
+  const showSuccess = useCallback((t: string, m: string) => { setSuccessTitle(t); setSuccessMessage(m); setShowSuccessModal(true); }, []);
+  const showError = useCallback((t: string, m: string) => { setErrorTitle(t); setErrorMessage(m); setShowErrorModal(true); }, []);
+
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (!checked) { setSelectedIds(new Set()); return; }
+    setSelectedIds(new Set(fournisseurs.map((f: any) => Number(f.id)).filter(id => Number.isInteger(id) && id > 0)));
+  }, [fournisseurs]);
+
+  const handleSelectOne = useCallback((id: number, checked: boolean) => {
+    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  }, []);
+
+  const handleBulkDelete = useCallback((ids: number[]) => {
+    const v = ids.filter(id => Number.isInteger(id) && id > 0);
+    if (!v.length) { showError('Sélection invalide', 'Aucun ID valide.'); return; }
+    setBulkDeleteTargetIds(v); setShowBulkDeleteModal(true);
+  }, [showError]);
+
+  const handleConfirmBulkDelete = useCallback(async () => {
+    if (!bulkDeleteTargetIds.length) return;
+    try {
+      await bulkDelete(bulkDeleteTargetIds);
+      setSelectedIds(new Set());
+      showSuccess('Suppression en lot', `${bulkDeleteTargetIds.length} fournisseur(s) supprimé(s).`);
+      await loadData(); await fetchReelStats();
+    } catch (err: any) { showError('Erreur', err.message); }
+    finally { setShowBulkDeleteModal(false); setBulkDeleteTargetIds([]); }
+  }, [bulkDeleteTargetIds, bulkDelete, loadData, fetchReelStats, showSuccess, showError]);
+
+  const handleAddClick = useCallback(() => { resetImageState(); setEditingFournisseur(null); setShowModal(true); }, [resetImageState]);
+
+  const handleEditFournisseur = useCallback(async (fournisseur: any) => {
+    if (!fournisseur?.id) return;
+    resetImageState(); setEditingFournisseur(fournisseur);
+    if (fournisseur.image) {
+      try {
+        if (window.api?.images?.getUrl) {
+          const r = await window.api.images.getUrl(fournisseur.image);
+          const url = r?.success ? r.data : typeof r === 'string' ? r : null;
+          if (url) { setImagePreview(url); setImagePath(fournisseur.image); }
+        }
+      } catch {}
+    }
+    setShowModal(true);
+  }, [resetImageState]);
+
+  const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const nom = String(fd.get('nom') || '').trim();
+    if (!nom) { showError('Champ requis', 'Le nom est obligatoire.'); return; }
+    const data: any = { nom, contact: String(fd.get('contact') || '').trim(), telephone: String(fd.get('telephone') || '').trim(), email: String(fd.get('email') || '').trim(), adresse: String(fd.get('adresse') || '').trim() };
+    if (imagePath) data.image = imagePath;
+    else if (editingFournisseur?.image && imagePreview) data.image = editingFournisseur.image;
+    else data.image = null;
+    try {
+      if (editingFournisseur) {
+        const old = editingFournisseur.image;
+        if (old && old !== data.image && window.api?.images?.delete) try { await window.api.images.delete(old); } catch {}
+        await updateFournisseur(Number(editingFournisseur.id), data);
+        showSuccess('Fournisseur modifié', `"${nom}" mis à jour.`);
+      } else {
+        await createFournisseur(data);
+        showSuccess('Fournisseur ajouté', `"${nom}" enregistré.`);
+      }
+      setShowModal(false); setEditingFournisseur(null); resetImageState();
+      await loadData(); await fetchReelStats();
+    } catch (err: any) { showError('Erreur', err.message); }
+  }, [editingFournisseur, imagePath, imagePreview, createFournisseur, updateFournisseur, resetImageState, loadData, fetchReelStats, showSuccess, showError]);
+
+  const handleViewFournisseur = useCallback((fournisseur: any) => { if (fournisseur?.id) { setSelectedFournisseur(fournisseur); setShowViewModal(true); } }, []);
+  const handleDeleteClick = useCallback((fournisseur: any) => { if (fournisseur?.id) { setDeleteTarget(fournisseur); setShowDeleteModal(true); } }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget?.id) return;
+    try {
+      if (deleteTarget.image && window.api?.images?.delete) try { await window.api.images.delete(deleteTarget.image); } catch {}
+      await deleteFournisseur(Number(deleteTarget.id));
+      setSelectedIds(prev => { const n = new Set(prev); n.delete(Number(deleteTarget.id)); return n; });
+      showSuccess('Fournisseur supprimé', `"${deleteTarget.nom}" supprimé.`);
+      await loadData(); await fetchReelStats();
+    } catch (err: any) { showError('Erreur', err.message); }
+    finally { setShowDeleteModal(false); setDeleteTarget(null); }
+  }, [deleteTarget, deleteFournisseur, loadData, fetchReelStats, showSuccess, showError]);
+
+  const safeTotalPages = Math.max(1, Number(totalPages || 1));
+  const handlePageChange = useCallback((page: number) => {
+    const p = Math.max(1, Math.min(Number(page) || 1, safeTotalPages));
+    if (p === currentPage) return;
+    setCurrentPage(p);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage, setCurrentPage, safeTotalPages]);
+
+  useEffect(() => { if (!loading) fetchReelStats(); }, [loading, fournisseurs, fetchReelStats]);
+
+  const tauxContact = reelStats.total > 0 ? Math.round((reelStats.avecContact / reelStats.total) * 100) : 0;
+
+  // ============================================================
+  // ⭐ SKELETON FULL-PAGE — alohan'ny render ny page
+  // ============================================================
+  if (loading && fournisseurs.length === 0) {
+    return <FournisseursPageSkeleton isDark={isDark} />;
+  }
+
+  return (
+    <main className="min-h-full w-full transition-colors duration-300" style={{ background: isDark ? '#0F172A' : '#EEF2FF' }}>
+      <div className="mx-auto w-full max-w-[1600px] space-y-2 px-2 py-4 sm:px-3 lg:px-5">
+      <FournisseursHeader
+  onAddFournisseur={handleAddClick}
+  refreshing={refreshing}
+  onRefresh={loadData}
+  isLoading={loading}
+  totalItems={reelStats.total || totalItems}
+/>
+
+        <FournisseursStats
+          total={reelStats.total}
+          avecContact={reelStats.avecContact}
+          avecEmail={reelStats.avecEmail}
+          tauxContact={tauxContact}
+        />
+
+        <FournisseursSearchBar
+          searchTerm={filters.searchTerm}
+          onSearchChange={(value) => {
+            setFilters(prev => ({ ...prev, searchTerm: value }));
+            setCurrentPage(1);
+            setSelectedIds(new Set());
+          }}
+          sortOption={sortOption}
+          onSortChange={(value) => {
+            setSortOption(value);
+            setCurrentPage(1);
+          }}
+        />
+
+        <section className="relative overflow-hidden rounded-2xl border bg-white transition-all duration-300 dark:bg-[#0F172A]" style={{ borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#E2E8F0', boxShadow: isDark ? '0 4px 24px -4px rgba(0,0,0,0.35)' : '0 4px 20px -4px rgba(79,70,229,0.08)' }}>
+          {refreshing && (<div className="absolute left-0 right-0 top-0 z-20 h-[3px] overflow-hidden rounded-t-2xl bg-transparent"><div className="h-full w-1/3 animate-[loading_1.2s_ease-in-out_infinite] rounded-full bg-brand-500" /></div>)}
+          <FournisseursTable
+            fournisseurs={fournisseurs}
+            onView={handleViewFournisseur}
+            onEdit={handleEditFournisseur}
+            onDelete={handleDeleteClick}
+            onAdd={handleAddClick}
+            isDark={isDark}
+            selectedIds={selectedIds}
+            onSelectAll={handleSelectAll}
+            onSelectOne={handleSelectOne}
+            onBulkDelete={handleBulkDelete}
+            globalStats={globalStats}
+            hasActiveFilter={hasActiveFilter}
+          />
+        </section>
+
+        {!loading && Number(totalItems || 0) > 0 && safeTotalPages > 1 && (
+          <div className="flex items-center justify-between rounded-2xl border bg-white px-3 py-2.5 transition-all duration-300 dark:bg-[#0F172A]" style={{ borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#E2E8F0', boxShadow: isDark ? '0 2px 12px -2px rgba(0,0,0,0.25)' : '0 2px 10px -2px rgba(79,70,229,0.06)' }}>
+            <FournisseursPagination currentPage={Math.max(1, Math.min(Number(currentPage || 1), safeTotalPages))} totalPages={safeTotalPages} totalItems={Number(totalItems || 0)} onPageChange={handlePageChange} />
+          </div>
+        )}
+      </div>
+
+      <FournisseursModalForm
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); resetImageState(); setEditingFournisseur(null); }}
+        onSubmit={handleSubmit}
+        editingFournisseur={editingFournisseur}
+        isDark={isDark}
+        imagePreview={imagePreview}
+        uploadingImage={uploadingImage}
+        uploadProgress={uploadProgress}
+        imageError={imageError}
+        onImageChange={handleImageChange}
+        onRemoveImage={handleRemoveImage}
+      />
+
+      {showViewModal && selectedFournisseur && (
+        <FournisseursViewModal
+          fournisseur={selectedFournisseur}
+          onClose={() => setShowViewModal(false)}
+          onEdit={() => { setShowViewModal(false); handleEditFournisseur(selectedFournisseur); }}
+          isDark={isDark}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }}
+        onConfirm={handleConfirmDelete}
+        title="Suppression"
+        message={`Supprimer "${deleteTarget?.nom || ''}" ?`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        confirmColor="red"
+        isDark={isDark}
+      />
+
+      <ConfirmModal
+        isOpen={showBulkDeleteModal}
+        onClose={() => { setShowBulkDeleteModal(false); setBulkDeleteTargetIds([]); }}
+        onConfirm={handleConfirmBulkDelete}
+        title="Suppression en lot"
+        message={`Voulez-vous supprimer ${bulkDeleteTargetIds.length} fournisseur(s) ?`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        confirmColor="red"
+        isDark={isDark}
+      />
+
+      <SuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title={successTitle}
+        message={successMessage}
+        buttonText="OK"
+        autoCloseDelay={3000}
+        zIndex={100000}
+      />
+
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title={errorTitle}
+        message={errorMessage}
+        buttonText="OK"
+        autoCloseDelay={4000}
+        zIndex={100000}
+      />
+    </main>
+  );
+};
+
+export default Fournisseurs;
